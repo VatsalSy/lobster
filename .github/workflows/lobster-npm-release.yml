@@ -432,6 +432,8 @@ jobs:
           RELEASE_NPM_DIST_TAG: ${{ inputs.npm_dist_tag }}
         run: |
           set -euo pipefail
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$HOME/.npmrc"
+          npm whoami >/dev/null
           publish_target="${{ steps.publish_tarball.outputs.path }}"
           if [[ -n "${publish_target}" ]]; then
             publish_target="./${publish_target}"
@@ -521,6 +523,7 @@ jobs:
           RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
         run: |
           set -euo pipefail
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$HOME/.npmrc"
           npm whoami >/dev/null
           npm dist-tag add "${PACKAGE_NAME}@${RELEASE_VERSION}" latest
           promoted_latest="$(npm view "${PACKAGE_NAME}" dist-tags.latest)"
