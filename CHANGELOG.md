@@ -4,6 +4,7 @@ All notable changes to Lobster will be documented in this file.
 
 ## Unreleased
 
+- Add `lobster graph` workflow visualization with `mermaid` (default), `dot`, and `ascii` outputs, including step-type nodes, `stdin` data-flow edges, conditional dependency labels (`when`/`condition`), approval-gate diamond shapes, and `--args-json` label resolution support. Thanks to [@vignesh07](https://github.com/vignesh07) (Issue [#53](https://github.com/openclaw/lobster/issues/53)).
 - Add workflow composition via `workflow:` + `workflow_args`, including recursive sub-workflow execution, cycle detection, and dry-run visibility for workflow steps. Sub-workflow approval/input halts are rejected with resume-state cleanup. Thanks to [@scottgl9](https://github.com/scottgl9) (PR [#73](https://github.com/openclaw/lobster/pull/73)).
 - Add per-step `on_error` workflow policies (`stop|continue|skip_rest`) for partial-failure recovery, with structured step error fields (`error`, `errorMessage`) for condition-based branching. Thanks to [@scottgl9](https://github.com/scottgl9) (PR [#72](https://github.com/openclaw/lobster/pull/72)).
 - Add per-step workflow `timeout_ms` handling, including timeout-triggered aborts, `SIGKILL` for timed shell steps, and dry-run annotations. Thanks to [@scottgl9](https://github.com/scottgl9) (PR [#74](https://github.com/openclaw/lobster/pull/74)).

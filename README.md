@@ -209,6 +209,31 @@ Notes:
 - If you need a human checkpoint before an LLM call, use a dedicated `approval:` step in the workflow file rather than `approve` inside the nested pipeline.
 - `cwd`, `env`, `stdin`, `when`, and `condition` work for both shell and pipeline steps.
 
+## Visualizing workflows
+
+Use `lobster graph` to inspect workflow structure before execution.
+
+```bash
+lobster graph --file path/to/workflow.lobster
+lobster graph --file path/to/workflow.lobster --format mermaid
+lobster graph --file path/to/workflow.lobster --format dot
+lobster graph --file path/to/workflow.lobster --format ascii
+lobster graph --file path/to/workflow.lobster --args-json '{"location":"Seattle"}'
+```
+
+What gets visualized:
+
+- each workflow step as a node (`run`, `pipeline`, `approval`, etc.)
+- data-flow edges from `stdin: $step.stdout` / `$step.json` references
+- conditional dependencies from `when:` / `condition:` expressions
+- approval gates as diamond-shaped nodes in `mermaid` and `dot` output
+
+Format notes:
+
+- `mermaid` (default): emits `flowchart TD` text for GitHub/Markdown rendering
+- `dot`: emits Graphviz DOT syntax
+- `ascii`: emits a terminal-friendly node/edge list
+
 ## Calling LLMs from workflows
 
 Use `llm.invoke` from a native `pipeline:` step for model-backed work:

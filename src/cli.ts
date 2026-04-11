@@ -3,7 +3,9 @@ import { createDefaultRegistry } from './commands/registry.js';
 import { runPipeline } from './runtime.js';
 import { decodeResumeToken, parseResumeArgs, resolveApprovalId } from './resume.js';
 import { cleanupApprovalIndexByStateKey, deleteApprovalId } from './state/store.js';
-import { WorkflowResumeArgumentError, runWorkflowFile } from './workflows/file.js';
+import { WorkflowResumeArgumentError, loadWorkflowFile, resolveWorkflowArgs, runWorkflowFile } from './workflows/file.js';
+import { renderWorkflowGraph } from './workflows/graph.js';
+import type { WorkflowGraphFormat } from './workflows/graph.js';
 import { deleteStateJson } from './state/store.js';
 import {
   finalizePipelineToolRun,
@@ -45,6 +47,11 @@ export async function runCli(argv) {
     return;
   }
 
+  if (argv[0] === 'graph') {
+    await handleGraph({ argv: argv.slice(1) });
+    return;
+  }
+
   if (argv[0] === 'run') {
     await handleRun({ argv: argv.slice(1), registry });
     return;
@@ -57,6 +64,67 @@ export async function runCli(argv) {
 
   // Default: treat argv as a pipeline string.
   await handleRun({ argv, registry });
+}
+
+async function handleGraph({ argv }) {
+  const parsed = parseGraphArgs(argv);
+  if (parsed.help) {
+    process.stdout.write(graphHelpText());
+    return;
+  }
+
+  if (!parsed.filePath) {
+    process.stderr.write('graph requires a workflow file path (use --file <path>)\n');
+    process.exitCode = 2;
+    return;
+  }
+
+  if (!isWorkflowGraphFormat(parsed.format)) {
+    process.stderr.write('graph --format must be one of: mermaid, dot, ascii\n');
+    process.exitCode = 2;
+    return;
+  }
+
+  let argsJson: Record<string, unknown> = {};
+  if (parsed.argsJson) {
+    try {
+      const value = JSON.parse(parsed.argsJson);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        process.stderr.write('graph --args-json must be a JSON object\n');
+        process.exitCode = 2;
+        return;
+      }
+      argsJson = value as Record<string, unknown>;
+    } catch {
+      process.stderr.write('graph --args-json must be valid JSON\n');
+      process.exitCode = 2;
+      return;
+    }
+  }
+
+  let filePath: string;
+  try {
+    filePath = await resolveWorkflowFile(parsed.filePath);
+  } catch (err) {
+    process.stderr.write(`Error: ${err?.message ?? String(err)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  try {
+    const workflow = await loadWorkflowFile(filePath);
+    const args = resolveWorkflowArgs(workflow.args, argsJson);
+    const graph = renderWorkflowGraph({ workflow, format: parsed.format, args });
+    process.stdout.write(graph);
+    process.stdout.write('\n');
+  } catch (err) {
+    process.stderr.write(`Error: ${err?.message ?? String(err)}\n`);
+    process.exitCode = 1;
+  }
+}
+
+function isWorkflowGraphFormat(value: string): value is WorkflowGraphFormat {
+  return value === 'mermaid' || value === 'dot' || value === 'ascii';
 }
 
 async function handleRun({ argv, registry }) {
@@ -287,6 +355,72 @@ function parseRunArgs(argv) {
   }
 
   return { mode, rest, filePath, argsJson, dryRun };
+}
+
+function parseGraphArgs(argv: string[]) {
+  const rest: string[] = [];
+  let filePath: string | null = null;
+  let format = 'mermaid';
+  let argsJson: string | null = null;
+  let help = false;
+
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i];
+
+    if (tok === '-h' || tok === '--help') {
+      help = true;
+      continue;
+    }
+
+    if (tok === '--file') {
+      const value = argv[i + 1];
+      if (value) {
+        filePath = value;
+        i++;
+      }
+      continue;
+    }
+
+    if (tok.startsWith('--file=')) {
+      filePath = tok.slice('--file='.length);
+      continue;
+    }
+
+    if (tok === '--format') {
+      const value = argv[i + 1];
+      if (value) {
+        format = value;
+        i++;
+      }
+      continue;
+    }
+
+    if (tok.startsWith('--format=')) {
+      format = tok.slice('--format='.length) || 'mermaid';
+      continue;
+    }
+
+    if (tok === '--args-json') {
+      const value = argv[i + 1];
+      if (value) {
+        argsJson = value;
+        i++;
+      }
+      continue;
+    }
+
+    if (tok.startsWith('--args-json=')) {
+      argsJson = tok.slice('--args-json='.length);
+      continue;
+    }
+
+    rest.push(tok);
+  }
+
+  if (!filePath && rest.length > 0) {
+    filePath = rest[0];
+  }
+  return { filePath, format, argsJson, help };
 }
 
 async function resolveRunTarget(parsed: {
@@ -600,6 +734,9 @@ function helpText() {
     `  lobster run --file path/to/workflow.lobster --args-json '{...}'\n` +
     `  lobster run --dry-run --file path/to/workflow.lobster\n` +
     `  lobster run --dry-run '<pipeline>'\n` +
+    `  lobster graph --file path/to/workflow.lobster --format mermaid\n` +
+    `  lobster graph --file path/to/workflow.lobster --format dot\n` +
+    `  lobster graph --file path/to/workflow.lobster --format ascii\n` +
     `  lobster resume --token <token> --approve yes|no\n` +
     `  lobster resume --token <token> --response-json '{...}'\n` +
     `  lobster resume --token <token> --cancel\n` +
@@ -615,5 +752,16 @@ function helpText() {
     `  lobster 'exec --json "echo [1,2,3]" | json'\n` +
     `  lobster run --mode tool 'exec --json "echo [1]" | approve --prompt "ok?"'\n\n` +
     `Commands:\n` +
-    `  exec, head, json, pick, table, where, approve, ask, openclaw.invoke, llm.invoke, llm_task.invoke, state.get, state.set, diff.last, commands.list, workflows.list, workflows.run\n`;
+    `  exec, head, json, pick, table, where, approve, ask, openclaw.invoke, llm.invoke, llm_task.invoke, state.get, state.set, diff.last, commands.list, workflows.list, workflows.run, graph\n`;
+}
+
+function graphHelpText() {
+  return `lobster graph — render workflow step graphs\n\n` +
+    `Usage:\n` +
+    `  lobster graph --file path/to/workflow.lobster [--format mermaid|dot|ascii] [--args-json '{...}']\n` +
+    `  lobster graph path/to/workflow.lobster [--format mermaid|dot|ascii]\n\n` +
+    `Flags:\n` +
+    `  --file       Workflow file path (.lobster, .yaml, .yml, .json)\n` +
+    `  --format     Output format: mermaid (default), dot, ascii\n` +
+    `  --args-json  JSON object used to resolve workflow args for labels\n`;
 }
