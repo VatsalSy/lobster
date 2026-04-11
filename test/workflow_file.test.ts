@@ -603,6 +603,107 @@ test('workflow files can mix shell steps, approval-only steps, and pipeline llm 
   }
 });
 
+test('workflow pipeline llm_task.invoke consumes stdin artifacts from previous step', async () => {
+  const registry = createDefaultRegistry();
+  const requests: any[] = [];
+  const server = http.createServer((req, res) => {
+    if (req.method !== 'POST' || req.url !== '/tools/invoke') {
+      res.writeHead(404);
+      res.end('nope');
+      return;
+    }
+
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      const parsed = JSON.parse(body || '{}');
+      requests.push(parsed);
+      const text = String(parsed?.args?.artifacts?.[0]?.text ?? '');
+      const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          result: {
+            ok: true,
+            result: {
+              runId: 'task_1',
+              model: parsed?.args?.model ?? 'test-model',
+              prompt: parsed?.args?.prompt,
+              output: {
+                text: JSON.stringify({ word_count: wordCount }),
+                data: { word_count: wordCount },
+                format: 'json',
+              },
+            },
+          },
+        }),
+      );
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+
+  const workflow = {
+    name: 'word-counter',
+    steps: [
+      {
+        id: 'make_words',
+        run: 'echo "One two three four five six"',
+      },
+      {
+        id: 'count_words',
+        pipeline: 'llm_task.invoke --prompt "How many words have been pasted below?" --disable-cache',
+        stdin: '$make_words.stdout',
+      },
+    ],
+  };
+
+  const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lobster-workflow-llm-task-stdin-'));
+  const stateDir = path.join(tmpDir, 'state');
+  const cacheDir = path.join(tmpDir, 'cache');
+  const filePath = path.join(tmpDir, 'workflow.lobster');
+  await fsp.writeFile(filePath, JSON.stringify(workflow, null, 2), 'utf8');
+
+  const env = {
+    ...process.env,
+    LOBSTER_STATE_DIR: stateDir,
+    LOBSTER_CACHE_DIR: cacheDir,
+    OPENCLAW_URL: `http://127.0.0.1:${port}`,
+  };
+
+  try {
+    const result = await runWorkflowFile({
+      filePath,
+      ctx: {
+        stdin: process.stdin,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        env,
+        mode: 'tool',
+        registry,
+      },
+    });
+
+    assert.equal(result.status, 'ok');
+    assert.equal(result.output.length, 1);
+    assert.equal((result.output[0] as any).kind, 'llm_task.invoke');
+    assert.equal((result.output[0] as any).output.data.word_count, 6);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].tool, 'llm-task');
+    assert.equal(requests[0].action, 'invoke');
+    assert.equal(requests[0].args.prompt, 'How many words have been pasted below?');
+    assert.match(String(requests[0].args.artifacts?.[0]?.text ?? ''), /One two three four five six/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('workflow pipeline steps respect cwd and feed later shell steps via stdout refs', async () => {
   const registry = createDefaultRegistry();
   const workflow = {

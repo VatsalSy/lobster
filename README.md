@@ -258,6 +258,23 @@ Built-in providers today:
 
 `llm_task.invoke` remains available as a backward-compatible alias for the OpenClaw provider.
 
+### `pipeline:` vs `run:` for LLM calls
+
+- Use `pipeline:` for `llm.invoke` and `llm_task.invoke` (they are Lobster pipeline stages, not shell executables).
+- Use `run:` only for real binaries in your shell (for example `openclaw.invoke`).
+
+Example (`stdin` from a prior step is passed to the LLM as artifacts):
+
+```yaml
+steps:
+  - id: make_words
+    run: echo "One two three four five six"
+
+  - id: count_words
+    pipeline: llm_task.invoke --prompt "How many words have been pasted below?"
+    stdin: $make_words.stdout
+```
+
 ## Calling OpenClaw tools from workflows
 
 Shell `run:` steps execute in your system shell, so OpenClaw tool calls there must be real executables.
