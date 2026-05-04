@@ -1,4 +1,4 @@
-import { Ajv } from 'ajv';
+import { Ajv } from "ajv";
 
 export const sharedAjv = new Ajv({
   allErrors: false,

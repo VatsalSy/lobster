@@ -15,9 +15,9 @@
  *   .pipe(stateSet('my-key'));
  */
 
-import { promises as fsp } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { promises as fsp } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 /**
  * Get the state directory
@@ -28,7 +28,7 @@ function getStateDir(ctx) {
   return (
     ctx?.stateDir ||
     (ctx?.env?.LOBSTER_STATE_DIR && String(ctx.env.LOBSTER_STATE_DIR).trim()) ||
-    path.join(os.homedir(), '.lobster', 'state')
+    path.join(os.homedir(), ".lobster", "state")
   );
 }
 
@@ -41,10 +41,10 @@ function getStateDir(ctx) {
 function keyToPath(stateDir, key) {
   const safe = String(key)
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  if (!safe) throw new Error('state key is empty/invalid');
+    .replace(/[^a-z0-9._-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!safe) throw new Error("state key is empty/invalid");
   return path.join(stateDir, `${safe}.json`);
 }
 
@@ -55,10 +55,10 @@ function keyToPath(stateDir, key) {
  * @returns {Object} Stage object with run method
  */
 export function stateGet(key) {
-  if (!key) throw new Error('stateGet requires a key');
+  if (!key) throw new Error("stateGet requires a key");
 
   return {
-    type: 'state.get',
+    type: "state.get",
     key,
 
     async run({ input, ctx }) {
@@ -72,10 +72,10 @@ export function stateGet(key) {
 
       let value = null;
       try {
-        const text = await fsp.readFile(filePath, 'utf8');
+        const text = await fsp.readFile(filePath, "utf8");
         value = JSON.parse(text);
       } catch (err) {
-        if (err?.code !== 'ENOENT') {
+        if (err?.code !== "ENOENT") {
           throw err;
         }
         // File doesn't exist, return null
@@ -97,10 +97,10 @@ export function stateGet(key) {
  * @returns {Object} Stage object with run method
  */
 export function stateSet(key) {
-  if (!key) throw new Error('stateSet requires a key');
+  if (!key) throw new Error("stateSet requires a key");
 
   return {
-    type: 'state.set',
+    type: "state.set",
     key,
 
     async run({ input, ctx }) {
@@ -116,7 +116,7 @@ export function stateSet(key) {
       const filePath = keyToPath(stateDir, key);
 
       await fsp.mkdir(stateDir, { recursive: true });
-      await fsp.writeFile(filePath, JSON.stringify(value, null, 2) + '\n', 'utf8');
+      await fsp.writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
 
       // Pass through the value
       return {
@@ -154,10 +154,10 @@ export async function readState(key, ctx = {}) {
   const filePath = keyToPath(stateDir, key);
 
   try {
-    const text = await fsp.readFile(filePath, 'utf8');
+    const text = await fsp.readFile(filePath, "utf8");
     return JSON.parse(text);
   } catch (err) {
-    if (err?.code === 'ENOENT') return null;
+    if (err?.code === "ENOENT") return null;
     throw err;
   }
 }
@@ -174,5 +174,5 @@ export async function writeState(key, value, ctx = {}) {
   const filePath = keyToPath(stateDir, key);
 
   await fsp.mkdir(stateDir, { recursive: true });
-  await fsp.writeFile(filePath, JSON.stringify(value, null, 2) + '\n', 'utf8');
+  await fsp.writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
