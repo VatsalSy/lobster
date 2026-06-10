@@ -17,6 +17,7 @@
 import { promises as fsp } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { ensureDirectory, isJsonSyntaxError, writeFileAtomic } from "../../state/store.js";
 
 /**
  * Get the state directory
@@ -103,7 +104,7 @@ export function diffLast(key, options: any = {}) {
         const text = await fsp.readFile(filePath, "utf8");
         before = JSON.parse(text);
       } catch (err) {
-        if (err?.code !== "ENOENT") {
+        if (err?.code !== "ENOENT" && !isJsonSyntaxError(err)) {
           throw err;
         }
       }
@@ -112,8 +113,8 @@ export function diffLast(key, options: any = {}) {
       const changed = stableStringify(before) !== stableStringify(value);
 
       // Store new value
-      await fsp.mkdir(stateDir, { recursive: true });
-      await fsp.writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+      await ensureDirectory(stateDir);
+      await writeFileAtomic(filePath, JSON.stringify(value, null, 2) + "\n");
 
       // Build result
       const result = {
@@ -159,7 +160,7 @@ export async function diffAndStoreValue(key, value, ctx = {}) {
     const text = await fsp.readFile(filePath, "utf8");
     before = JSON.parse(text);
   } catch (err) {
-    if (err?.code !== "ENOENT") {
+    if (err?.code !== "ENOENT" && !isJsonSyntaxError(err)) {
       throw err;
     }
   }
@@ -168,8 +169,8 @@ export async function diffAndStoreValue(key, value, ctx = {}) {
   const changed = stableStringify(before) !== stableStringify(value);
 
   // Store new value
-  await fsp.mkdir(stateDir, { recursive: true });
-  await fsp.writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+  await ensureDirectory(stateDir);
+  await writeFileAtomic(filePath, JSON.stringify(value, null, 2) + "\n");
 
   return { before, after: value, changed };
 }
